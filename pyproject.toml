@@ -1,0 +1,24 @@
+[tool.poetry]
+name = "async-image-prediction"
+version = "0.1.0"
+description = "asynchronous image prediction system. The system will predict whether or not an image has a dog in it or not in an asynchronous matter"
+authors = ["Nishanth pradeep raj R <nishanthrajamani@gmail.com>"]
+license = "MIT"
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.12"
+fastapi = "^0.115.6"
+uvicorn = "^0.34.0"
+pydantic = "^2.10.4"
+celery = "^5.4.0"
+redis = "^5.2.1"
+sqlalchemy = "^2.0.36"
+torch = "^2.5.1"
+torchvision = "^0.20.1"
+ultralytics = "^8.3.55"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
