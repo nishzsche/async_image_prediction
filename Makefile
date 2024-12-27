@@ -10,15 +10,10 @@ PYTHON_INTERPRETER = python
 # COMMANDS                                                                      #
 #################################################################################
 
-
 ## Install Python Dependencies
 .PHONY: requirements
 requirements:
-	$(PYTHON_INTERPRETER) -m pip install -U pip
-	$(PYTHON_INTERPRETER) -m pip install -r requirements.txt
-	
-
-
+	poetry install
 
 ## Delete all compiled Python files
 .PHONY: clean
@@ -29,30 +24,23 @@ clean:
 ## Lint using flake8 and black (use `make format` to do formatting)
 .PHONY: lint
 lint:
-	flake8 async_image_prediction
-	isort --check --diff --profile black async_image_prediction
-	black --check --config pyproject.toml async_image_prediction
+	poetry run flake8 async_image_prediction
+	poetry run isort --check --diff --profile black async_image_prediction
+	poetry run black --check --config pyproject.toml async_image_prediction
 
 ## Format source code with black
 .PHONY: format
 format:
-	black --config pyproject.toml async_image_prediction
-
-
-
-
-
+	poetry run black --config pyproject.toml async_image_prediction
 
 #################################################################################
 # PROJECT RULES                                                                 #
 #################################################################################
 
-
 ## Make Dataset
 .PHONY: data
 data: requirements
-	$(PYTHON_INTERPRETER) async_image_prediction/dataset.py
-
+	poetry run $(PYTHON_INTERPRETER) async_image_prediction/dataset.py
 
 #################################################################################
 # Self Documenting Commands                                                     #
