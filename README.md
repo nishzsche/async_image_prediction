@@ -58,4 +58,26 @@ An asynchronous image prediction system to identify whether an image contains a 
 ```
 
 --------
+# Design
+
+```mermaid
+flowchart LR
+    subgraph FastAPI Workflow
+        A[Client] -->|POST /image_prediction| B[FastAPI Application]
+        B -->|Save Image| C@{ shape: win-pane, label: "Local Storage" }
+        B -->|Insert Task Metadata| D@{shape: cyl, label: Database PostgreSQL}
+        B -->|Send Task| E{{Redis Message Broker}}
+    end
+
+    subgraph Celery Workflow
+        E -->|Receive Task| F((Celery Worker))
+        F -->|Run Prediction| G{{YOLO Model}}
+        G -->|Prediction Result| F
+        F -->|Update Task Status| D
+    end
+
+    D -->|Query Prediction Status| B
+    B -.->|Return JSON response with status to POST request| A
+    B -->|GET /image_prediction/id| A
+```
 

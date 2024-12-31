@@ -20,6 +20,10 @@ ultralytics = "^8.3.55"
 python-dotenv = "^1.0.1"
 loguru = "^0.7.3"
 python-multipart = "^0.0.20"
+psycopg2-binary = "^2.9.10"
+flower = "^2.0.1"
+yolo5 = "^0.0.1"
+huggingface-hub = "0.10.0"
 
 
 [tool.poetry.group.dev.dependencies]
