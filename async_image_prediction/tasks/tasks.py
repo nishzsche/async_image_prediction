@@ -16,7 +16,7 @@ dotenv.load_dotenv(dotenv_path)
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(levelname)s - %(message)s",
-    filename="celery_worker.log",
+    filename="logs/celery_worker.log",
     filemode="a",
 )
 logger = logging.getLogger(__name__)

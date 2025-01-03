@@ -96,7 +96,7 @@ start-redis:
 start-celery:
 	#@@ps aux | grep 'celery' | grep -v 'grep' | awk '{print $$2}' | xargs -r kill -9 || true
 	@echo "Starting Celery worker..."
-	@poetry run celery -A async_image_prediction.tasks.tasks worker --loglevel=info > celery.log 2>&1 &
+	@poetry run celery -A async_image_prediction.tasks.tasks worker --loglevel=info > logs/celery.log 2>&1 &
 
 ## Start FastAPI application
 .PHONY: start-api
