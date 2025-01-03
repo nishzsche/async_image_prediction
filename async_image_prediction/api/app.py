@@ -2,14 +2,15 @@ import os
 from fastapi import FastAPI, UploadFile, Depends
 from fastapi.responses import PlainTextResponse
 from fastapi.exception_handlers import HTTPException
+from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from uuid import uuid4
 from typing import Optional
 import mimetypes
 from celery import Celery
-from .db import SessionLocal
-from .models import Prediction
 import dotenv
+from .db import get_db
+from .models import Prediction
 
 project_dir = os.path.join(os.path.dirname(__file__), os.pardir, os.pardir)
 dotenv_path = os.path.join(project_dir, ".env")
@@ -38,14 +39,6 @@ class PredictionStatus(BaseModel):
     id: str
     status: str
     has_dog: Optional[bool]
-
-
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
 
 
 def get_celery():
@@ -86,9 +79,8 @@ async def create_prediction(
 
 
 @app.get("/image_prediction/{prediction_id}")
-async def get_prediction_status(prediction_id: str):
+async def get_prediction_status(prediction_id: str, db: Session = Depends(get_db)):
     """Endpoint to retrieve the status of a prediction."""
-    db = SessionLocal()
     prediction = db.query(Prediction).filter(Prediction.id == prediction_id).first()
     db.close()
 

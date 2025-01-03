@@ -24,6 +24,7 @@ psycopg2-binary = "^2.9.10"
 flower = "^2.0.1"
 yolo5 = "^0.0.1"
 huggingface-hub = "0.10.0"
+httpx = "^0.28.1"
 
 
 [tool.poetry.group.dev.dependencies]
