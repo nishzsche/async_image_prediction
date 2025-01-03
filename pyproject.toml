@@ -17,7 +17,22 @@ sqlalchemy = "^2.0.36"
 torch = "^2.5.1"
 torchvision = "^0.20.1"
 ultralytics = "^8.3.55"
+python-dotenv = "^1.0.1"
+loguru = "^0.7.3"
+python-multipart = "^0.0.20"
+psycopg2-binary = "^2.9.10"
+flower = "^2.0.1"
+yolo5 = "^0.0.1"
+huggingface-hub = "0.10.0"
+httpx = "^0.28.1"
 
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.3.4"
+pytest-cov = "^6.0.0"
+black = "^24.10.0"
+flake8 = "^7.1.1"
+pre-commit = "^4.0.1"
 
 [build-system]
 requires = ["poetry-core"]
