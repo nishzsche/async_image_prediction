@@ -1,13 +1,19 @@
 import os
-from fastapi import FastAPI, UploadFile, HTTPException
-from fastapi.responses import JSONResponse
+from fastapi import FastAPI, UploadFile, Depends
+from fastapi.responses import PlainTextResponse
+from fastapi.exception_handlers import HTTPException
 from pydantic import BaseModel
 from uuid import uuid4
 from typing import Optional
+import mimetypes
 from celery import Celery
 from .db import SessionLocal
 from .models import Prediction
-from ..tasks.tasks import process_prediction
+import dotenv
+
+project_dir = os.path.join(os.path.dirname(__file__), os.pardir, os.pardir)
+dotenv_path = os.path.join(project_dir, ".env")
+dotenv.load_dotenv(dotenv_path)
 
 # Get the base directory of the project
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__)))
@@ -21,7 +27,7 @@ app = FastAPI()
 
 # Initialize Celery
 celery_app = Celery(
-    "tasks", broker="redis://localhost:6379/0", backend="redis://localhost:6379/0"
+    "tasks", broker=os.getenv("REDIS_URL"), backend=os.getenv("REDIS_URL")
 )
 
 # In-memory database to store prediction statuses
@@ -34,11 +40,27 @@ class PredictionStatus(BaseModel):
     has_dog: Optional[bool]
 
 
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
+
+def get_celery():
+    return celery_app
+
+
 @app.post("/image_prediction")
-async def create_prediction(image: UploadFile):
+async def create_prediction(
+    image: UploadFile, celery=Depends(get_celery), db=Depends(get_db)
+):
     """Endpoint to create a new image prediction request."""
-    if not image.content_type.startswith("image/"):
-        raise HTTPException(status_code=400, detail="Uploaded file is not an image.")
+    if not image.content_type.startswith("image/") or not mimetypes.guess_extension(
+        image.content_type
+    ):
+        raise HTTPException(status_code=400, detail="Invalid file type.")
 
     # Generate a unique ID for the prediction
     prediction_id = str(uuid4())
@@ -49,7 +71,6 @@ async def create_prediction(image: UploadFile):
         buffer.write(await image.read())
 
     # Store metadata in the database
-    db = SessionLocal()
     db_prediction = Prediction(
         id=prediction_id,
         status="PENDING",
@@ -57,19 +78,11 @@ async def create_prediction(image: UploadFile):
     )
     db.add(db_prediction)
     db.commit()
-    db.close()
 
     # Dispatch the Celery task
-    process_prediction.delay(prediction_id)
+    celery.send_task("tasks.process_prediction", args=[prediction_id])
 
-    return JSONResponse(
-        status_code=200,
-        content={
-            "id": prediction_id,
-            "status": "PENDING",
-            "has_dog": None,
-        },
-    )
+    return PredictionStatus(id=prediction_id, status="PENDING", has_dog=None)
 
 
 @app.get("/image_prediction/{prediction_id}")
@@ -82,14 +95,28 @@ async def get_prediction_status(prediction_id: str):
     if not prediction:
         raise HTTPException(status_code=404, detail="Prediction not found.")
 
-    return JSONResponse(
-        status_code=200,
-        content={
-            "id": str(prediction.id),
-            "status": prediction.status,
-            "has_dog": prediction.has_dog,
-        },
+    return PredictionStatus(
+        id=str(prediction.id), status=prediction.status, has_dog=prediction.has_dog
     )
+
+
+@app.exception_handler(HTTPException)
+async def http_exception_handler(request, exc):
+    return PlainTextResponse(str(exc.detail), status_code=exc.status_code)
+
+
+@app.get("/health")
+async def health_check():
+    try:
+        # Check Redis
+        celery_app.control.ping(timeout=1)
+
+        # Check Database
+        with get_db() as db:
+            db.execute("SELECT 1")
+        return {"status": "healthy"}
+    except Exception as e:
+        return {"status": "unhealthy", "details": str(e)}
 
 
 if __name__ == "__main__":

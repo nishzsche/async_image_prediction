@@ -6,6 +6,11 @@ import traceback
 from ..api.db import SessionLocal
 from ..api.models import Prediction
 import logging
+import dotenv
+
+project_dir = os.path.join(os.path.dirname(__file__), os.pardir * 2)
+dotenv_path = os.path.join(project_dir, ".env")
+dotenv.load_dotenv(dotenv_path)
 
 # Initialize logging
 logging.basicConfig(
@@ -19,8 +24,8 @@ logger = logging.getLogger(__name__)
 # Initialize Celery
 celery_app = Celery(
     "tasks",
-    broker="redis://localhost:6379/0",
-    backend="redis://localhost:6379/0",
+    broker=os.getenv("REDIS_URL"),
+    backend=os.getenv("REDIS_URL"),
 )
 
 # Get the base directory of the project

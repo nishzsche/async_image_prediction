@@ -37,16 +37,15 @@ format:
 db-init:
 	@if docker ps -aq -f name=postgres_db | grep -q .; then \
 		if [ "$$(docker inspect -f '{{.State.Running}}' postgres_db)" = "false" ]; then \
-			echo "Checking if port 5432 is already in use..."; \
+			echo "Checking if port 5433 (host) is already in use..."; \
+			if sudo lsof -i :5433 >/dev/null 2>&1; then \
+				echo "Killing process on port 5433 (host)..."; \
+				sudo lsof -t -i:5433 | xargs -r sudo kill -9; \
+			fi; \
+			echo "Checking if port 5432 (container) is already in use..."; \
 			if sudo lsof -i :5432 >/dev/null 2>&1; then \
-				echo "Port 5432 is in use. Checking if it is linked to the postgres_db container..."; \
-				if docker inspect -f '{{.State.Pid}}' postgres_db | xargs -I{} sudo lsof -i :5432 -t | grep -q {}; then \
-					echo "Stopping the offending process from the postgres_db container..."; \
-					docker stop postgres_db; \
-				else \
-					echo "Error: Port 5432 is in use by another process. Please free the port and try again."; \
-					exit 1; \
-				fi; \
+				echo "Killing process on port 5432 (container)..."; \
+				sudo lsof -t -i:5432 | xargs -r sudo kill -9; \
 			fi; \
 			echo "Starting existing PostgreSQL container..."; \
 			docker start postgres_db; \
@@ -54,66 +53,84 @@ db-init:
 			echo "PostgreSQL container is already running."; \
 		fi; \
 	else \
-		echo "Checking if port 5432 is already in use..."; \
-		if lsof -i :5432 >/dev/null 2>&1; then \
-			echo "Error: Port 5432 is already in use by another process. Please free the port or use a different port."; \
-			exit 1; \
-		else \
-			echo "Creating a new PostgreSQL container..."; \
-			docker run --name postgres_db \
-				-e POSTGRES_DB=$(PROJECT_NAME) \
-				-e POSTGRES_USER=app_user \
-				-e POSTGRES_PASSWORD=app_pass \
-				-p 5432:5432 \
-				-d postgres; \
-			sleep 5; \
-			poetry run $(PYTHON_INTERPRETER) async_image_prediction/database/initialize_db.py; \
+		echo "Checking if port 5433 (host) is already in use..."; \
+		if sudo lsof -i :5433 >/dev/null 2>&1; then \
+			echo "Killing process on port 5433 (host)..."; \
+			sudo lsof -t -i:5433 | xargs -r sudo kill -9; \
 		fi; \
+		echo "Checking if port 5432 (container) is already in use..."; \
+		if sudo lsof -i :5432 >/dev/null 2>&1; then \
+			echo "Killing process on port 5432 (container)..."; \
+			sudo lsof -t -i:5432 | xargs -r sudo kill -9; \
+		fi; \
+		echo "Creating a new PostgreSQL container..."; \
+		docker run --name postgres_db \
+			-e POSTGRES_DB=$(PROJECT_NAME) \
+			-e POSTGRES_USER=app_user \
+			-e POSTGRES_PASSWORD=app_pass \
+			-p 5433:5432 \
+			-d postgres; \
+		sleep 5; \
+		poetry run $(PYTHON_INTERPRETER) async_image_prediction/database/initialize_db.py; \
 	fi
 
 ## Reset PostgreSQL database and schema
 .PHONY: db-reset
 db-reset:
-	@if [ "$(shell docker ps -aq -f name=postgres_db)" ]; then \
-		echo "Removing PostgreSQL container..."; \
-		docker rm -f postgres_db; \
-		sleep 2; \
-	fi
-	echo "Creating a fresh PostgreSQL container...";
-	docker run --name postgres_db -e POSTGRES_DB=$(PROJECT_NAME) -e POSTGRES_USER=app_user -e POSTGRES_PASSWORD=app_pass -p 5432:5432 -d postgres;
-	sleep 5
-	poetry run $(PYTHON_INTERPRETER) async_image_prediction/database/initialize_db.py
+	@echo "Resetting PostgreSQL database..."
+	@docker rm -f postgres_db || true
+	@make db-init
 
 ## Start Redis server
 .PHONY: start-redis
 start-redis:
-	redis-server &
+	@if ! sudo lsof -i:6379 >/dev/null 2>&1; then \
+		echo "Starting Redis server..."; \
+		redis-server & \
+	else \
+		echo "Redis server is already running."; \
+	fi
 
 ## Start Celery worker
 .PHONY: start-celery
 start-celery:
-	poetry run celery -A async_image_prediction.tasks.tasks worker --loglevel=info > celery.log 2>&1 &
-
-## Restart Redis server
-.PHONY: restart-redis
-restart-redis:
-	@sudo pkill redis-server || true
-	make start-redis
-
-## Restart Celery worker
-.PHONY: restart-celery
-restart-celery:
-	@ps aux | grep 'celery' | grep -v 'grep' | awk '{print $$2}' | xargs kill -9 || true
-	make start-celery
+	#@@ps aux | grep 'celery' | grep -v 'grep' | awk '{print $$2}' | xargs -r kill -9 || true
+	@echo "Starting Celery worker..."
+	@poetry run celery -A async_image_prediction.tasks.tasks worker --loglevel=info > celery.log 2>&1 &
 
 ## Start FastAPI application
 .PHONY: start-api
 start-api:
-	poetry run uvicorn async_image_prediction.api.app:app --reload #> api.log 2>&1 &
+	@if ! sudo lsof -i:8080 >/dev/null 2>&1; then \
+		echo "Starting FastAPI server..."; \
+		poetry run uvicorn async_image_prediction.api.app:app --reload --host 0.0.0.0 --port 8080; \
+	else \
+		echo "FastAPI server is already running."; \
+	fi
+
+## Stop all app services
+.PHONY: shutdown
+shutdown:
+	@echo "Stopping all services..."
+	@pgrep -f 'uvicorn' | xargs -r sudo kill -9 || true
+	@pgrep -f 'celery' | xargs -r sudo kill -9 || true
+	@pgrep -f 'redis-server' | xargs -r sudo kill -9 || true
+	@docker stop postgres_db || true
+	@echo "All services stopped."
+
+## Restart all app services
+.PHONY: restart-all
+restart-all: shutdown
+	make setup-all
 
 ## Run all tools (Redis, Celery, FastAPI)
 .PHONY: setup-all
-setup-all: requirements db-init start-redis start-celery start-api
+setup-all: 
+	make requirements
+	make db-init
+	make start-redis
+	make start-celery
+	make start-api
 
 #################################################################################
 # Self Documenting Commands                                                     #
